@@ -1,0 +1,14 @@
+# --- Environment & Keys ---
+.env
+taxoflow_venv/
+__pycache__/
+*.py[cod]
+
+# --- Data & Junk ---
+
+.DS_Store
+Untitled*
+
+# --- IDE & Tooling ---
+.vscode/
+.idea/
