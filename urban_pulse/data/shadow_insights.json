@@ -1,0 +1,16 @@
+{
+    "Ice Cream": {
+        "Magnum": {
+            "Winning_Platform": "Zepto",
+            "Losing_Platform": "Blinkit",
+            "Root_Insight": "Zepto's cold-chain logic maintains -18\u00b0C better than Blinkit's open-bag delivery."
+        }
+    },
+    "Snacking": {
+        "Lays": {
+            "Winning_Platform": "Swiggy Instamart",
+            "Losing_Platform": "Zepto",
+            "Root_Insight": "Instamart has better multi-pack stock availability in Delhi-NCR clusters."
+        }
+    }
+}

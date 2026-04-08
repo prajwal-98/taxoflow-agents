@@ -109,7 +109,7 @@ def _extract_retry_seconds(err: Exception) -> float | None:
 
 def recover_missing_data():
     print("--- TaxoFlow Agent Swarm: Checkpoint Recovery Mode ---")
-    df = pd.read_csv('data/processed_geopol_data.csv')
+    df = pd.read_csv("geopolitics/data/synthetic_geopol_data.csv")
     working_model = get_working_model()
     
     # Identify rows where the agent failed previously
@@ -142,7 +142,7 @@ Return ONLY valid JSON with keys: 'primary_topic', 'sentiment_score', 'truth_aud
             df.at[index, 'truth_audit'] = agent_data.get('truth_audit')
 
             # Checkpoint after each successful row to prevent data loss.
-            df.to_csv('data/processed_geopol_data.csv', index=False)
+            df.to_csv('geopolitics/data/synthetic_geopol_data.csv', index=False)
         except Exception as e:
             print(f"      [Failed] Row {index+1}: {e}")
 

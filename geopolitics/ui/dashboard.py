@@ -1,7 +1,7 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
 # 1. Page Configuration
 st.set_page_config(
@@ -13,15 +13,20 @@ st.set_page_config(
 st.title("🌐 TaxoFlow: Geopolitical Swarm Intelligence")
 st.markdown("Visualizing multi-agent taxonomy and sentiment clustering in 3D space.")
 
-# 2. Data Loading
+# 2. Robust Data Loading
 @st.cache_data
 def load_data():
+    # Architect Note: Use absolute pathing based on the project root for Cloud stability
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(current_dir)
+    data_path = os.path.join(root_dir, 'geopolitics', 'data', 'vector_mapped_data.csv')
+    
     try:
-        df = pd.read_csv('data/vector_mapped_data.csv')        # Convert cluster_id to string so Plotly uses distinct colors, not a gradient
+        df = pd.read_csv(data_path)
         df['cluster_id'] = df['cluster_id'].astype(str)
         return df
     except FileNotFoundError:
-        st.error("Data missing. Please run vector_memory.py first.")
+        st.error(f"Data missing at {data_path}. Please run vector_memory.py first.")
         return pd.DataFrame()
 
 df = load_data()
@@ -44,7 +49,7 @@ if not df.empty:
         color='cluster_id',
         hover_name='primary_topic',
         hover_data={
-            'x': False, 'y': False, 'z': False, # Hide raw math coordinates
+            'x': False, 'y': False, 'z': False, 
             'country': True,
             'event_year': True,
             'sentiment_score': True,
@@ -55,7 +60,6 @@ if not df.empty:
         color_discrete_sequence=px.colors.qualitative.Plotly
     )
 
-    # Clean up the UI of the chart
     fig.update_layout(
         margin=dict(l=0, r=0, b=0, t=40),
         scene=dict(
@@ -65,9 +69,7 @@ if not df.empty:
         )
     )
 
-    # Render the chart taking up the full container width
     st.plotly_chart(fig, use_container_width=True)
-
     st.divider()
 
     # 5. Raw Data Inspection Table
@@ -77,9 +79,9 @@ if not df.empty:
         use_container_width=True
     )
 
-    # --- System Resilience Documentation ---
+# --- System Resilience Documentation ---
 with st.sidebar:
-    st.markdown("---") # Visual separator
+    st.markdown("---") 
     with st.expander("🛠️ System Health & Resilience Note"):
         st.info(
             "This pipeline features an **Automated Failover System**. "

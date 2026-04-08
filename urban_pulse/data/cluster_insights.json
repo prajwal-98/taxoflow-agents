@@ -1,0 +1,17 @@
+{
+    "0": {
+        "cluster_title": "The Midnight Melt Crisis",
+        "root_cause": "Delivery delays > 40 mins during peak Mumbai humidity affecting frozen categories.",
+        "impact_level": "High"
+    },
+    "1": {
+        "cluster_title": "Silk Board Logistics Friction",
+        "root_cause": "Traffic congestion in Bangalore 'Last Mile' causing freshness degradation for produce.",
+        "impact_level": "Medium"
+    },
+    "2": {
+        "cluster_title": "Packaging Integrity Failure",
+        "root_cause": "Specific brand poly-bags tearing during multi-drop routes.",
+        "impact_level": "Low"
+    }
+}

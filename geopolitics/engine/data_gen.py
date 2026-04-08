@@ -4,9 +4,9 @@ import time
 import os
 import random
 from google import genai  # <--- CRITICAL FIX: The new 2026 import path
-from utils.config import Config
+from core_utils.config import Config
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-1.5-flash"
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.1-flash-lite-preview"
 
 _CLIENT: genai.Client | None = None
 _MODEL_NAMES_CACHE: set[str] | None = None
@@ -79,7 +79,7 @@ def _resolve_model_name(client: genai.Client, requested: str) -> str:
     """
     requested = (requested or "").strip()
     if not requested:
-        requested = "gemini-1.5-flash"
+        requested = "gemini-3.1-flash-lite-preview"
 
     names = _get_available_model_names(client)
 
@@ -173,7 +173,7 @@ def run_firehose():
             
     if all_data:
         df = pd.DataFrame(all_data)
-        df.to_csv("data/synthetic_geopol_data.csv", index=False)
+        df.to_csv("geopolitics/data/synthetic_geopol_data.csv", index=False)
         print("--- Firehose complete. CSV saved! ---")
     else:
         print("--- Firehose Error: No rows generated. Check API Key. ---")
