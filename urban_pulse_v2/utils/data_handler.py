@@ -18,11 +18,11 @@ def load_raw_data(file_path):
         # Standardize column names (stripping whitespace) to prevent key errors
         df.columns = [col.strip() for col in df.columns]
         
-        # Basic Cleaning: Remove rows where 'Review Text' is empty as LLMs can't process them
-        if "Review Text" in df.columns:
-            df = df.dropna(subset=["Review Text"])
+        # Basic Cleaning: Remove rows where 'raw_text' is empty as LLMs can't process them
+        if "raw_text" in df.columns:
+            df = df.dropna(subset=["raw_text"])
             # Remove extremely short noise (e.g., "." or " ")
-            df = df[df["Review Text"].str.len() > 2]
+            df = df[df["raw_text"].str.len() > 2]
             
         return df
     except Exception as e:

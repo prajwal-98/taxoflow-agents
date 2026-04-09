@@ -1,0 +1,5 @@
+review_id,date,city,platform,category,brand,delivery_time,order_context,raw_text,star_rating,cart_value_inr,surge_fee_paid,x,y,z,cluster
+a4b5c6d7-e8f9-4a0b-1c2d-3e4f5a6b7c8d,2025-02-19,Bangalore,BigBasket Now,Home Care,Surf Excel,65,Silk Board Jam,Adjust maadi? 65 mins for Surf Excel is too much guru. Surge fee wasting only.,1,450,True,,,,
+76543210-9876-45d6-7e8f-9a0b1c2d3e4f,2025-04-04,Bangalore,BigBasket Now,Home Care,Vim,14,Last-minute Pooja items,Sakkath! Vim in 14 mins near Bellandur. BB Now is real tech speed.,5,210,False,,,,
+77654321-0987-46d7-8e9f-0a1b2c3d4e5f,2025-04-04,Bangalore,BigBasket Now,Home Care,Surf Excel,14,Last-minute Pooja items,Sakkath! Surf Excel in 14 mins near Bellandur. BB Now is real tech speed.,5,1200,False,,,,
+b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6g,2025-04-04,Bangalore,BigBasket Now,Home Care,Surf Excel,14,Last-minute Pooja items,Sakkath! Surf Excel in 14 mins near Bellandur. BB Now is real tech speed.,5,1200,False,,,,

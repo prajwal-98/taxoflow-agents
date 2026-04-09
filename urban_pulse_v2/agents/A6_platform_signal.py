@@ -17,10 +17,10 @@ def platform_signal_node(state: UrbanPulseState) -> UrbanPulseState:
 
     try:
         # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         # Sampling data to identify comparative language
-        review_samples = df["Review Text"].sample(min(20, len(df))).tolist()
+        review_samples = df["raw_text"].sample(min(20, len(df))).tolist()
         
         prompt = f"""
         Act as a Competitive Intelligence Analyst for the Indian Q-Commerce market.
@@ -46,8 +46,12 @@ def platform_signal_node(state: UrbanPulseState) -> UrbanPulseState:
 
         # Using Gemini 3 Flash for competitive pattern recognition
         response = client.models.generate_content(
-            model="gemini-3-flash",
-            contents=prompt
+            model="gemini-3.1-flash-lite-preview",
+            contents=prompt,
+            config={
+                    "max_output_tokens": 350, 
+                    "temperature": 0.1      
+                } 
         )
         
         # Parse the Competitive Intelligence Data

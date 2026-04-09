@@ -18,7 +18,7 @@ def novelty_score_node(state: UrbanPulseState) -> UrbanPulseState:
 
     try:
         # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         # We feed the summaries from earlier agents to provide "Chain of Thought" context
         context_summary = state.get("A2_context_signals", [{}])[0].get("signal_analysis", "N/A")
@@ -51,8 +51,12 @@ def novelty_score_node(state: UrbanPulseState) -> UrbanPulseState:
 
         # Using Gemini 3 Flash for the final high-level synthesis
         response = client.models.generate_content(
-            model="gemini-3-flash",
-            contents=prompt
+            model="gemini-3.1-flash-lite-preview",
+            contents=prompt,
+            config={
+                    "max_output_tokens": 350, 
+                    "temperature": 0.1      
+                }
         )
         
         # Parse the Strategic Data

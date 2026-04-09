@@ -18,11 +18,11 @@ def cluster_agent_node(state: UrbanPulseState) -> UrbanPulseState:
 
     try:
         # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         # We provide a diverse sample of reviews to the LLM
         # In a full-scale version, we would pass cluster centroids
-        review_samples = df["Review Text"].sample(min(20, len(df))).tolist()
+        review_samples = df["raw_text"].sample(min(20, len(df))).tolist()
         
         prompt = f"""
         Act as a Consumer Insights Strategist for Q-Commerce.
@@ -43,8 +43,12 @@ def cluster_agent_node(state: UrbanPulseState) -> UrbanPulseState:
 
         # Using Gemini 3 Flash for synthesis
         response = client.models.generate_content(
-            model="gemini-3-flash",
-            contents=prompt
+            model="gemini-3.1-flash-lite-preview",
+            contents=prompt,
+            config={
+                    "max_output_tokens": 350, 
+                    "temperature": 0.1      
+                }  
         )
         
         # Parse the JSON Persona data

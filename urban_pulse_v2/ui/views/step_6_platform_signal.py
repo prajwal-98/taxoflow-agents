@@ -13,3 +13,7 @@ def render(state):
     
     with st.expander("View Market Analysis Trace"):
         st.markdown(f'<div class="reasoning-box">{state["A6_reasoning"]}</div>', unsafe_allow_html=True)
+    st.divider()
+    if st.button("Continue to Next Step →", type="primary"):
+        st.session_state.current_step += 1
+        st.rerun()

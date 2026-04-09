@@ -30,3 +30,23 @@ def render(state):
     # 3. Reasoning Trace
     with st.expander("View Agent Reasoning Trace"):
         st.code(reasoning, language="text")
+
+    st.markdown("---") # Visual separator line
+
+    #  Agent 1 has actually finished its job
+    if state.get("A1_is_valid") is True:
+        col1, col2 = st.columns([3, 1]) 
+
+        with col1:
+            st.success("✅ Step 1 Complete. Data is ready for Context Detection.")
+            
+        with col2:
+            # We change the step from 1 to 2
+            st.divider()
+            if st.button("Continue to Next Step →", type="primary"):
+                st.session_state.current_step += 1
+                st.rerun()
+    else:
+        # If the agent hasn't run or failed, show a disabled button or a hint
+        st.info("Waiting for Gatekeeper validation to complete...")
+        st.button("Continue to Next Agent →", disabled=True)

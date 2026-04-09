@@ -1,7 +1,7 @@
 import streamlit as st
 
 def render(state):
-    st.header("Step 2: Hyper-Local Context Detection")
+    st.header("Agent 2: Hyper-Local Context Detection")
     
     # Extract data from Agent 2's output in the state
     signals = state.get("A2_context_signals", [])
@@ -24,3 +24,7 @@ def render(state):
 
     st.subheader("Agent Reasoning Trace")
     st.code(state.get("A2_reasoning", "No trace available."), language="text")
+    st.divider()
+    if st.button("Continue to Next Step →", type="primary"):
+        st.session_state.current_step += 1
+        st.rerun()

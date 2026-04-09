@@ -2,9 +2,31 @@ import streamlit as st
 import pandas as pd
 
 def render_sidebar():
+
+
+    # --- CHANGE: CSS to reduce Sidebar Width ---
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stSidebar"] {
+                width: 260px !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.sidebar.title("📌 UrbanPulse")
     st.sidebar.markdown("*Multi-Agent Intelligent System*")
     st.sidebar.divider()
+
+    # --- 1. THE MODE TOGGLE ---
+    app_mode = st.sidebar.radio(
+        "Execution Mode",
+        options=["Live API", "Demo Mode"],
+        index=0,
+        help="Demo Mode uses pre-cached data to skip API calls."
+    )
 
     # --- Section 1: Dataset ---
     st.sidebar.header("🔹 Section 1: Dataset")
@@ -49,19 +71,20 @@ def render_sidebar():
                 def get_opts(col):
                     return sorted(working_df[col].dropna().unique().tolist())
 
+                # --- CHANGE: default=[] and added placeholders to keep UI clean ---
                 selected_cities = st.sidebar.multiselect(
                     "Cities", options=get_opts('city'), 
-                    default=get_opts('city'), disabled=is_locked
+                    default=[], placeholder="All Cities selected", disabled=is_locked
                 )
                 
                 selected_platforms = st.sidebar.multiselect(
                     "Platforms", options=get_opts('platform'), 
-                    default=get_opts('platform'), disabled=is_locked
+                    default=[], placeholder="All Platforms selected", disabled=is_locked
                 )
 
                 selected_categories = st.sidebar.multiselect(
                     "Categories", options=get_opts('category'), 
-                    default=get_opts('category'), disabled=is_locked
+                    default=[], placeholder="All Categories selected", disabled=is_locked
                 )
 
                 # --- Section 3: Live Selection Stats ---
@@ -101,4 +124,4 @@ def render_sidebar():
                         st.session_state.filters_locked = False
                         st.rerun()
 
-    return uploaded_file
+    return uploaded_file, app_mode

@@ -18,10 +18,10 @@ def category_escalation_node(state: UrbanPulseState) -> UrbanPulseState:
 
     try:
         # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         # Batching 20 reviews for efficient triage
-        review_batch = df["Review Text"].head(20).tolist()
+        review_batch = df["raw_text"].head(20).tolist()
         
         prompt = f"""
         Act as a Senior Operations Manager for Q-Commerce.
@@ -44,8 +44,12 @@ def category_escalation_node(state: UrbanPulseState) -> UrbanPulseState:
 
         # Using Gemini 3 Flash for rapid classification
         response = client.models.generate_content(
-            model="gemini-3-flash",
-            contents=prompt
+            model="gemini-3.1-flash-lite-preview",
+            contents=prompt,
+            config={
+                    "max_output_tokens": 350, 
+                    "temperature": 0.1      
+                } 
         )
         
         # Parse the Triage Data

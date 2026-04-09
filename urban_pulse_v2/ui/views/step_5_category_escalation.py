@@ -21,3 +21,7 @@ def render(state):
 
     with st.expander("View Escalation Logic"):
         st.markdown(f'<div class="reasoning-box">{state["A5_reasoning"]}</div>', unsafe_allow_html=True)
+    st.divider()
+    if st.button("Continue to Next Step →", type="primary"):
+        st.session_state.current_step += 1
+        st.rerun()

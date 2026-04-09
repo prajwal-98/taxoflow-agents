@@ -47,22 +47,31 @@ def gatekeeper_node(state: UrbanPulseState) -> UrbanPulseState:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         prompt = f"""
-        {SYSTEM_INSTRUCTION}
-        
-        Analyze these samples for Q-Commerce domain alignment:
-        {sample_reviews}
-        
-        Output ONLY a valid JSON object with:
-        "is_qcommerce": bool,
-        "confidence": float,
-        "detected_signals": list,
-        "justification": str
-        """
+                {SYSTEM_INSTRUCTION}
+
+                Analyze this batch of reviews as a single dataset for Q-Commerce alignment:
+                {sample_reviews}
+
+                Task:
+                Provide a SINGLE JSON object representing the collective validity of this data.
+
+                Output ONLY this JSON structure:
+                {{
+                "is_qcommerce": bool,
+                "confidence": float,
+                "detected_signals": list,
+                "justification": "One sentence summarizing the whole batch"
+                }}
+                """
        
         try:
             response = client.models.generate_content(
                 model="gemini-3.1-flash-lite-preview",
-                contents=prompt
+                contents=prompt,
+                config={
+                    "max_output_tokens": 350, 
+                    "temperature": 0.1      
+                }    
             )
             
             raw_text = response.text.strip().replace("```json", "").replace("```", "")
@@ -78,6 +87,7 @@ def gatekeeper_node(state: UrbanPulseState) -> UrbanPulseState:
                 checks["Domain"] = True
                 reasoning_steps.append(f"Status: Domain Confirmed. Justification: {data.get('justification')}")
                 reasoning_steps.append(f"Detected Signals: {', '.join(data.get('detected_signals', []))}")
+                print("reasoning_stepsreasoning_steps", reasoning_steps)
             else:
                 reasoning_steps.append("Status: Domain Mismatch.")
                 
