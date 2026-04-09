@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 import os
+import plotly.express as px
+import altair as alt
 from core.orchestrator import urban_pulse_app
 from ui.styles import apply_custom_styles
 from ui.sidebar import render_sidebar
 from utils.state_utils import load_state_snapshot, save_state_snapshot 
+from ui.views.landing_page import render_landing_page
 from ui.views.step_1_gatekeeper import render as render_step_1
 from ui.views.step_2_context_detector import render as render_step_2
 from ui.views.step_3_semantic_shaper import render as render_step_3
@@ -101,40 +104,13 @@ def render_pipeline_progress():
             elif i == current: col.markdown(f"**🔵 {name}**"); st.divider()
             else: col.caption(f"🔒 {name}")
 
-def render_landing_page():
-    """Always-visible landing page so the app never renders as a blank canvas."""
-    st.title("UrbanPulse V2 Intelligence Dashboard")
-    st.caption("GenAI multi-agent review intelligence for urban commerce signals.")
 
-    raw_df = st.session_state.raw_df
-    is_locked = st.session_state.filters_locked
-    run_complete = st.session_state.pipeline_run_complete
 
-    col1, col2, col3 = st.columns(3)
-    if raw_df is None:
-        col1.metric("Total Reviews", "0")
-        col2.metric("Cities", "N/A")
-        col3.metric("Platforms", "N/A")
-        st.subheader("Data Preview")
-        st.info("No dataset loaded yet. Upload a CSV or use sample data from the sidebar.")
-    else:
-        total_rows = len(raw_df)
-        city_col = "city" if "city" in raw_df.columns else None
-        platform_col = "platform" if "platform" in raw_df.columns else None
-        col1.metric("Total Reviews", f"{total_rows:,}")
-        col2.metric("Cities", raw_df[city_col].nunique() if city_col else "N/A")
-        col3.metric("Platforms", raw_df[platform_col].nunique() if platform_col else "N/A")
-        st.subheader("Data Preview")
-        st.dataframe(raw_df.head(20), use_container_width=True)
 
-    if raw_df is None:
-        st.warning("No dataset loaded. Expected columns: date, city, platform, category, raw_text.")
-    elif not is_locked:
-        st.info("Dataset ready. Configure and lock filters in the sidebar to start the agent pipeline.")
-    elif run_complete:
-        st.success("Pipeline run complete. Use the step navigation to inspect agent outputs.")
-    else:
-        st.info("Filters locked. Pipeline will run and results will appear below.")
+import streamlit as st
+import os
+import pandas as pd
+from utils.state_utils import load_state_snapshot, save_state_snapshot
 
 def main():
     st.set_page_config(
@@ -142,140 +118,138 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
+
+    st.markdown("""
+<style>
+    /* Remove top spacing */
+    .block-container {
+        padding-top: 1rem !important;
+    }
+
+    /* Remove extra header height */
+    header[data-testid="stHeader"] {
+        height: 0px;
+    }
+
+    /* Reduce top spacing even more */
+    .stApp {
+        margin-top: -10px;
+    }
+</style>
+""", unsafe_allow_html=True)
     
     initialize_state()
 
-    # --- 🆕 FIX: Determine Mode BEFORE Data Loading & Sidebar ---
-    # We check session_state first; if it's the very first run, we default to 'Live API'
-    current_mode = st.session_state.get('app_mode', 'Live API')
-
-    # 1. Data Loading Logic (Runs before UI)
+    # 1. Define Paths
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    DEFAULT_DATA_PATH = os.path.join(base_dir, "data", "demo", "urban_reviews.csv")
-    DEMO_DATA_PATH = os.path.join(base_dir, "data", "demo", "demo_source.csv") 
+    DEFAULT_DATA_PATH = os.path.join(base_dir, "data", "raw", "urban_reviews.csv")
+    # Note: Using your demo folder path
+    DEMO_DATA_PATH = os.path.join(base_dir, "data", "demo", "demo_source.csv")
     
-    # 🆕 Use current_mode to decide which file to load BEFORE rendering sidebar
-    active_data_path = DEMO_DATA_PATH if current_mode == "Demo Mode" else DEFAULT_DATA_PATH
+    # 2. Track Mode in State
+    if 'app_mode' not in st.session_state:
+        st.session_state.app_mode = "Live API"
+
+    # --- 3. LOAD DATA BEFORE SIDEBAR (Fixes Filter Visibility) ---
+    # We use the existing session state mode to decide what to load
+    target_path = DEMO_DATA_PATH if st.session_state.app_mode == "Demo Mode" else DEFAULT_DATA_PATH
     
-    if st.session_state.raw_df is None and os.path.exists(active_data_path):
+    if st.session_state.raw_df is None and os.path.exists(target_path):
         try:
-            st.session_state.raw_df = normalize_dataframe(pd.read_csv(active_data_path))
+            st.session_state.raw_df = normalize_dataframe(pd.read_csv(target_path))
         except Exception:
             st.session_state.raw_df = None
 
-    # 2. Sidebar Component - Now filters will see the data loaded above
-    uploaded_file, app_mode = render_sidebar()
+    # 4. Render Sidebar
+    uploaded_file, selected_mode = render_sidebar()
 
-    # Handle Demo Mode Trigger
-    if app_mode == "Demo Mode" and not st.session_state.pipeline_run_complete:
-        if st.sidebar.button("Launch Demo Analysis", type="primary"):
-            success, message = load_state_snapshot()
-            if success:
-                # Changes below:
-                st.session_state.filters_locked = True
-                st.session_state.current_step = 1 # Start from the beginning
-                st.session_state.pipeline_run_complete = True # Tell app the work is already done
-                st.rerun()
-            else:
-                st.sidebar.error(message)
-
-    # Handle Mode Switch Reset
-    current_mode = st.session_state.get('last_mode', 'Live API')
-    if app_mode != current_mode:
-        st.session_state.last_mode = app_mode
-        st.session_state.raw_df = None
+    # 5. Handle Mode Switch (Resets state if you toggle the radio button)
+    if selected_mode != st.session_state.app_mode:
+        st.session_state.app_mode = selected_mode
+        st.session_state.raw_df = None 
         st.session_state.filters_locked = False
         st.session_state.pipeline_run_complete = False
         st.rerun()
 
-    # 3. Handle New Uploads
+    # --- 6. RESTORED: LAUNCH DEMO BUTTON ---
+    if selected_mode == "Demo Mode" and not st.session_state.pipeline_run_complete:
+        if st.sidebar.button("🚀 Launch Demo Analysis",type="primary",use_container_width=True):
+            success, message = load_state_snapshot()
+            if success:
+                st.session_state.filters_locked = True
+                st.session_state.pipeline_run_complete = True
+                st.session_state.current_step = 1
+                st.session_state.completed_steps = [1, 2, 3, 4, 5, 6, 7, 8]
+                st.session_state.A1_is_valid = True
+                st.session_state.A1_routing_decision = "Success: Data Validated"
+                st.rerun()
+            else:
+                st.sidebar.error(message)
+
+    # 7. Handle New Uploads
     if uploaded_file is not None:
         st.session_state.raw_df = normalize_dataframe(pd.read_csv(uploaded_file))
         st.session_state.pipeline_run_complete = False
         st.session_state.filtered_df = None
 
-    # 4. Main UI Logic
+    # 8. Main UI Logic
     if not st.session_state.filters_locked:
-        # Show landing page if filters aren't locked
         render_landing_page()
     else:
-        # --- ADDED PROGRESS BAR HERE ---
         render_pipeline_progress()
 
-        # 5. Pipeline Execution Logic
-        # 5. Main Execution Logic
+        # 9. Execution Logic
         if st.session_state.filters_locked and st.session_state.raw_df is not None:
-            
-            # 1. Capture the Filtered DataFrame (ensures it is NOT None)
             current_filtered_df = apply_filters(
                 st.session_state.raw_df, 
                 st.session_state.active_filters
             )
             st.session_state.filtered_df = current_filtered_df
 
-            # 2. Safety Check before calling Agents
             if current_filtered_df is None or current_filtered_df.empty:
-                st.error("🚨 Filtered data is empty. Adjust your selection in the sidebar.")
+                st.error("Filtered data is empty. Adjust selection.")
                 st.session_state.filters_locked = False
             
             elif not st.session_state.pipeline_run_complete:
-                # --- DEMO VS LIVE ROUTING ---
-                if app_mode == "Demo Mode":
-                    with st.spinner("📂 Loading Cached Intelligence..."):
-                        success, message = load_state_snapshot()
-                        if success:
-                            st.session_state.pipeline_run_complete = True
-                            st.session_state.current_step = 8 # Jump directly to summary
-                            st.rerun()
-                        else:
-                            st.error(message)
-                            st.session_state.filters_locked = False
-                else:
-                    # 3. Prepare Safe Filters (Lists to Tuples)
-                    safe_filters = {
-                        k: tuple(v) if isinstance(v, list) else v 
-                        for k, v in st.session_state.active_filters.items()
+                # Live Swarm Execution
+                safe_filters = {
+                    k: tuple(v) if isinstance(v, list) else v 
+                    for k, v in st.session_state.active_filters.items()
+                }
+
+                with st.spinner("🤖 Agent Swarm is analyzing..."):
+                    input_state = {
+                        "raw_df": current_filtered_df, 
+                        "filtered_df": current_filtered_df,
+                        "active_filters": safe_filters,
+                        "current_step": 1,
+                        "completed_steps": [],
+                        "system_logs": [],
+                        "A1_is_valid": False,
+                        "A1_routing_decision": "Processing...",
+                        "A1_validation_checks": {},
+                        "A1_reasoning": ""
                     }
 
-                    with st.spinner("🤖 Agent Swarm is analyzing the Urban Pulse..."):
-                        input_state = {
-                            # This maps your filtered DataFrame to the key the node expects
-                            "raw_df": current_filtered_df, 
-                            "filtered_df": current_filtered_df,
-                            "active_filters": safe_filters,
-                            "current_step": 1,
-                            "completed_steps": [],
-                            "system_logs": [],
-                            "A1_is_valid": False,
-                            "A1_routing_decision": "Processing...",
-                            "A1_validation_checks": {},
-                            "A1_reasoning": ""
-                        }
+                    try:
+                        output_state = urban_pulse_app.invoke(input_state)
+                        for key, value in output_state.items():
+                            st.session_state[key] = value
 
-                        try:
-                            # 4. Invoke the Swarm
-                            output_state = urban_pulse_app.invoke(input_state)
-                            
-                            # 5. Sync results back
-                            for key, value in output_state.items():
-                                st.session_state[key] = value
-
-                            # Force the UI to start at Step 1, even though the backend finished all 7
-                            st.session_state.current_step = 1
-                            
-                            st.session_state.pipeline_run_complete = True
-                            st.rerun() 
-                        except Exception as e:
-                            st.error(f"Agent Swarm Error: {e}")
-                            st.session_state.filters_locked = False
+                        st.session_state.current_step = 1
+                        st.session_state.pipeline_run_complete = True
+                        st.rerun() 
+                    except Exception as e:
+                        st.error(f"Agent Swarm Error: {e}")
+                        st.session_state.filters_locked = False
             
-            # --- DEVELOPER CAPTURE OPTION ---
-            if app_mode == "Live API" and st.session_state.pipeline_run_complete:
+            # Developer Snapshot Capture
+            if selected_mode == "Live API" and st.session_state.pipeline_run_complete:
                 if st.sidebar.button("💾 Save as Demo Snapshot"):
                     msg = save_state_snapshot()
                     st.sidebar.success(msg)
-                        
-            # 7. Routing to Modular Views
+
+            # Routing to Views
             step = st.session_state.get('current_step', 1)
             view_map = {
                 1: render_step_1, 2: render_step_2, 3: render_step_3,
