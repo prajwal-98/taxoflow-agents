@@ -12,3 +12,11 @@ Untitled*
 # --- IDE & Tooling ---
 .vscode/
 .idea/
+.cursor/
+
+__pycache__/
+*.pyc
+
+# --- Test files ---
+test_agent.py
+generate_manifest.py
