@@ -11,6 +11,7 @@ from agents.A4_cluster_agent import cluster_agent_node
 from agents.A5_category_escalation import category_escalation_node
 from agents.A6_platform_signal import platform_signal_node
 from agents.A7_novelty_score import novelty_score_node
+from agents.A8_insight_dashboard import decision_dashboard_node
 
 def check_validation(state: UrbanPulseState):
     """
@@ -36,6 +37,7 @@ def build_urban_pulse_graph():
     workflow.add_node("A5_category_escalation", category_escalation_node)
     workflow.add_node("A6_platform_signal", platform_signal_node)
     workflow.add_node("A7_novelty_score", novelty_score_node)
+    workflow.add_node("A8_insight_dashboard", decision_dashboard_node)
 
     # 3. Define the Flow (Edges)
     
@@ -58,7 +60,8 @@ def build_urban_pulse_graph():
     workflow.add_edge("A4_cluster_agent", "A5_category_escalation")
     workflow.add_edge("A5_category_escalation", "A6_platform_signal")
     workflow.add_edge("A6_platform_signal", "A7_novelty_score")
-    workflow.add_edge("A7_novelty_score", END)
+    workflow.add_edge("A7_novelty_score", "A8_insight_dashboard")
+    workflow.add_edge("A8_insight_dashboard", END)
 
     # 4. Compile the Graph
     return workflow.compile()

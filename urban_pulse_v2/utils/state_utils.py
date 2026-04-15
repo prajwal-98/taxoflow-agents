@@ -34,7 +34,7 @@ def save_state_snapshot():
         "A5_output", "A5_reasoning", 
         "A6_output", "A6_reasoning"
         "A6_market_insights", "A6_reasoning", 
-        "A7_novelty_data", "A7_reasoning",
+        "A7_output", "A7_reasoning", "A8_output",
         "completed_steps", "pipeline_run_complete"
     ]
     

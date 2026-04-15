@@ -15,7 +15,7 @@ from ui.views.step_4_cluster_agent import render as render_step_4
 from ui.views.step_5_category_escalation import render as render_step_5
 from ui.views.step_6_platform_signal import render as render_step_6
 from ui.views.step_7_novelty_score import render as render_step_7
-from ui.views.step_8_master_dashboard import render as render_step_8
+from ui.views.step_8_insight_dashboard import render as render_step_8
 
 from dotenv import load_dotenv
 

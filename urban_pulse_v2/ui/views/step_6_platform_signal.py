@@ -269,10 +269,12 @@ def render(state):
     # CONTINUE BUTTON
     col1, col2, col3 = st.columns([1, 1, 1])
     with col3:
-        st.markdown('<div class="up-btn-container">', unsafe_allow_html=True)
-        if st.button("Continue  →", use_container_width=True):
+        st.markdown('<div class="up-continue-btn">', unsafe_allow_html=True)
+        if st.button("Continue  →  Novelty Score Agent", use_container_width=True):
             st.session_state.current_step = 7
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
+
+        # st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)

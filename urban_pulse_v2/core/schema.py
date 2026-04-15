@@ -50,8 +50,11 @@ class UrbanPulseState(TypedDict):
     A6_reasoning: str
     
     # --- A7: NOVELTY SCORE ---
-    A7_novelty_data: Dict[str, float]       # Novelty scores and trend labels
-    A7_reasoning: str                       # Agent 7 reasoning trace
+    A7_output: Dict[str, Any]               # NEW: slang_intelligence, city_slang, sentiment_mapping, emerging_slang
+    A7_reasoning: str
+
+    # --- A8: DECISION DASHBOARD AGENT ---
+    A8_output: Dict[str, Any]               # Final synthesized story, metrics, and action plans
     
     # --- SYSTEM & LOGGING ---
     system_logs: List[str]                  # Execution timestamps and internal error tracking

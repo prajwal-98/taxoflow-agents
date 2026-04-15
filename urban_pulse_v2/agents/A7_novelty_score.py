@@ -1,66 +1,144 @@
-import os
+import pandas as pd
 from core.schema import UrbanPulseState
-from utils.llm_client import generate_response
+from core.constants import CITY_SLANG_MAP
 
 
 def novelty_score_node(state: UrbanPulseState) -> UrbanPulseState:
     """
-    Step 7: Calculates the 'Novelty Index' of current feedback.
-    Determines if detected issues are recurring known problems or 
-    emerging anomalies that require a strategic pivot.
+    Step 7 — Language Intelligence (A7)
+
+    - Slang usage detection
+    - City-wise slang mapping
+    - Sentiment mapping (simple heuristic)
+    - Emerging slang detection
     """
+
     df = state.get("filtered_df")
     reasoning_steps = []
 
     if df is None or df.empty:
-        state["A7_reasoning"] = "Error: No data available for novelty scoring."
+        state["A7_output"] = {}
+        state["A7_reasoning"] = "No data available"
         return state
 
     try:
-        context_summary = state.get("A2_context_signals", [{}])[0].get("signal_analysis", "N/A")
-        persona_summary = state.get("A4_cluster_stats", {}).get("persona_summary", "N/A")
-        market_intel = state.get("A6_market_insights", {}).get("analysis_summary", "N/A")
+        df = df.copy()
+        df["raw_text"] = df["raw_text"].fillna("").astype(str)
 
-        prompt = f"""
-        Act as a Strategic Innovation Lead for a Q-Commerce firm.
-        
-        Baseline Knowledge:
-        Standard issues include: Late delivery, crushed bread, missing items, and high delivery fees.
-        
-        Current Pipeline Findings:
-        - Local Context: {context_summary}
-        - Detected Personas: {persona_summary}
-        - Market Signals: {market_intel}
-        
-        Task:
-        1. Assign a 'Novelty Score' from 0.0 to 1.0. 
-           (0.0 = Business as usual/Legacy issues, 1.0 = Highly anomalous/New market shift).
-        2. Identify 'Emerging Anomalies': Are there new patterns not mentioned in the baseline?
-        3. Strategic Recommendation: What is the single most important action for the COO?
-        
-        Output ONLY a valid JSON object with:
-        "novelty_score": float,
-        "is_anomaly": bool,
-        "anomalous_patterns": list of strings,
-        "strategic_recommendation": str
-        """
+        # -------------------------------
+        # 1. SLANG DETECTION
+        # -------------------------------
+        slang_usage = {}
 
-        response_text = generate_response(prompt, state, temperature=0.1, parse_json=True)
+        for city, slang_list in CITY_SLANG_MAP.items():
+            for slang in slang_list:
+                count = df["raw_text"].str.lower().str.contains(slang).sum()
 
-        state["A7_novelty_data"] = response_text
+                if count > 0:
+                    slang_usage[slang] = slang_usage.get(slang, 0) + int(count)
 
-        reasoning_steps.append("Status: Final Novelty Assessment finalized.")
-        reasoning_steps.append(f"Novelty Index: {response_text.get('novelty_score')} ({'High Alert' if response_text.get('is_anomaly') else 'Stable Patterns'})")
-        
-        recommendation = response_text.get('strategic_recommendation', '')
-        reasoning_steps.append(f"Strategic Recommendation: {recommendation[:100]}...")
+        # -------------------------------
+        # 2. SENTIMENT BREAKDOWN (heuristic)
+        # -------------------------------
+        slang_sentiment = []
+
+        for slang, count in slang_usage.items():
+
+            subset = df[df["raw_text"].str.lower().str.contains(slang)]
+
+            pos = subset["raw_text"].str.contains(
+                "good|fast|great|awesome|quick", case=False, regex=True
+            ).sum()
+
+            neg = subset["raw_text"].str.contains(
+                "late|delay|bad|missing|slow|rude", case=False, regex=True
+            ).sum()
+
+            neutral = count - (pos + neg)
+
+            slang_sentiment.append({
+                "slang": slang,
+                "total_usage": count,
+                "sentiment": {
+                    "positive": int(pos),
+                    "negative": int(neg),
+                    "neutral": int(max(neutral, 0))
+                }
+            })
+
+        # -------------------------------
+        # 3. CITY-WISE SLANG
+        # -------------------------------
+        city_slang = []
+
+        for city, slang_list in CITY_SLANG_MAP.items():
+            for slang in slang_list:
+                count = df[
+                    (df["city"] == city) &
+                    (df["raw_text"].str.lower().str.contains(slang))
+                ].shape[0]
+
+                if count > 0:
+                    city_slang.append({
+                        "city": city,
+                        "slang": slang,
+                        "usage": int(count)
+                    })
+
+        # -------------------------------
+        # 4. SENTIMENT MAPPING (MEANING)
+        # -------------------------------
+        sentiment_mapping = []
+
+        for item in slang_sentiment:
+            slang = item["slang"]
+            sentiment = item["sentiment"]
+
+            dominant = max(sentiment, key=sentiment.get)
+
+            sentiment_mapping.append({
+                "slang": slang,
+                "dominant_sentiment": dominant
+            })
+
+        # -------------------------------
+        # 5. EMERGING SLANG (RARE BUT PRESENT)
+        # -------------------------------
+        emerging_slang = []
+
+        for slang, count in slang_usage.items():
+            if 1 <= count <= 3:
+                emerging_slang.append({
+                    "slang": slang,
+                    "usage": count
+                })
+
+        # -------------------------------
+        # FINAL OUTPUT
+        # -------------------------------
+        state["A7_output"] = {
+            "slang_intelligence": slang_sentiment,
+            "city_slang": city_slang,
+            "sentiment_mapping": sentiment_mapping,
+            "emerging_slang": emerging_slang
+        }
+
+        reasoning_steps.append("Slang and language patterns analyzed successfully")
 
     except Exception as e:
-        reasoning_steps.append(f"Warning: Novelty Score Agent Error: {str(e)}")
+        state["A7_output"] = {}
+        reasoning_steps.append(f"Error: {str(e)}")
 
+    # -------------------------------
+    # STATE UPDATE
+    # -------------------------------
     state["A7_reasoning"] = "\n".join(reasoning_steps)
 
-    if 7 not in state["completed_steps"]:
-        state["completed_steps"].append(7)
+    steps = state.get("completed_steps", [])
+    if 7 not in steps:
+        steps.append(7)
+
+    state["completed_steps"] = steps
+    state["current_step"] = 8
 
     return state

@@ -1,0 +1,7 @@
+CITY_SLANG_MAP = {
+    "Bangalore": ["macha", "da", "bro", "bombe"],
+    "Delhi": ["bhai", "scene", "jugaad", "yaar"],
+    "Mumbai": ["boss", "bhau", "kadak", "jhakaas"],
+    "Pune": ["bhau", "dude", "yaar"],
+    "Hyderabad": ["mama", "baigan", "lite", "dude"]
+}
