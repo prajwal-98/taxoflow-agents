@@ -7,3 +7,4 @@ python-dotenv
 tenacity
 scipy
 hdbscan
+langgraph
