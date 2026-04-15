@@ -1,0 +1,18 @@
+name: Keep Streamlit App Awake
+
+# This section tells GitHub WHEN to run the script
+on:
+  schedule:
+    # This cron schedule runs the job at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  # This line allows you to trigger the action manually from the GitHub UI if you ever want to
+  workflow_dispatch: 
+
+# This section tells GitHub WHAT to do
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit URL
+        # The curl command silently visits your app and prints the HTTP status code (e.g., 200 for success)
+        run: curl -s -o /dev/null -w "%{http_code}" https://taxoflow-agents-5rd5ts7g2echmatzmakj5k.streamlit.app/
