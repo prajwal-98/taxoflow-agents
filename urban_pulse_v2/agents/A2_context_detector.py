@@ -1,95 +1,139 @@
-import os
 import pandas as pd
-from google import genai
+import json
 from core.schema import UrbanPulseState
 from core.constants import CITY_SLANG_MAP
+from utils.llm_client import generate_response
+
 
 def context_detector_node(state: UrbanPulseState) -> UrbanPulseState:
     """
-    Step 2: Injects hyper-local context and slang signals into the analysis.
-    Uses the Gemini 3 Flash model to decode regional nuances.
+    Step 2 — Context Detection (A2)
     """
-    # FIX 1: Use the filtered_df so it respects the Global Lock!
+
     df = state.get("filtered_df")
-    
-    # FIX 2: Safely handle the multiselect list to get a string
-    active_filters = state.get("active_filters", {})
-    city_list = active_filters.get("city", ["Bangalore"])
-    city = city_list[0] if isinstance(city_list, list) and len(city_list) > 0 else "Bangalore"
-    
-    # Retrieve local slang from our constants
-    slang_reference = CITY_SLANG_MAP.get(city, [])
-    reasoning_steps = []
-    
-    # 2. SAFETY GUARD FIRST (Before any prints or head() calls)
-    if df is None or not hasattr(df, "columns") or df.empty:
-        state["A2_reasoning"] = "Error: No data available for context detection."
+
+    # -------------------------------
+    # 1. SAFETY CHECK
+    # -------------------------------
+    if df is None or df.empty:
+        state["A2_output"] = _empty_output("No data available")
+        state["A2_reasoning"] = "No data available"
+        state["current_step"] = 2
         return state
 
+    # -------------------------------
+    # 2. CITY CONTEXT
+    # -------------------------------
+    active_filters = state.get("active_filters", {})
+    city = (active_filters.get("city") or ["Bangalore"])[0]
+
+    slang_reference = CITY_SLANG_MAP.get(city, [])
+
+    # -------------------------------
+    # 3. SAMPLE REVIEWS
+    # -------------------------------
+    sample_reviews = (
+        df.get("raw_text", pd.Series())
+        .dropna()
+        .astype(str)
+        .head(10)
+        .tolist()
+    )
+
+    # -------------------------------
+    # 4. PROMPT
+    # -------------------------------
+    prompt = f"""
+    You are a Local Market Analyst for Q-Commerce in {city}.
+
+    Slang Reference: {slang_reference}
+
+    Reviews:
+    {sample_reviews}
+
+    Return STRICT JSON:
+
+    {{
+        "localized_sentiment": "short summary",
+        "slang_detected": ["list"],
+        "operational_context": "what is going wrong",
+        "top_themes": ["3-5 issues"]
+    }}
+    """
+
+    # -------------------------------
+    # 5. LLM CALL
+    # -------------------------------
     try:
-        # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-        print("clientclientclient", client)
-        # We sample reviews to detect the 'vibe' and specific local issues
-        # Using .get() for safety in case 'raw_text' somehow goes missing]
-        print("dfdfdfdfdf", df)
-        sample_reviews = df.get("raw_text", pd.Series()).head(10).tolist()
-        print("sample_reviewssample_reviews",sample_reviews)
-        prompt = f"""
-        Act as a Local Cultural Analyst and Q-Commerce Specialist for the city of {city}.
-        
-        Contextual Grounding:
-        The following slang/terms are common in {city} Q-Commerce feedback: {slang_reference}
-        
-        Task:
-        Analyze the provided reviews. Identify if customers are using local nuances to 
-        describe issues (e.g., delivery speed, product quality, or courier behavior).
-        
-        Reviews:
-        {sample_reviews}
-        
-       Output a highly compressed summary covering:
-        1. Localized Sentiment
-        2. Slang Match
-        3. Operational Context
-
-        CRITICAL CONSTRAINT: The entire output MUST be strictly 2 to 3 lines maximum. Do not use bullet points or long explanations. Be brutally concise.
-        """
-
-        # Using Gemini 3.1 Flash Preview
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
-            contents=prompt,
-            config={
-            "max_output_tokens": 350,  # Limits output to ~75 words (approx 2-3 lines)
-            "temperature": 0.1         # Lower temperature makes it more "to the point"
-            }
-        )
-        
-        # Update State with detected signals
-        state["A2_context_signals"] = [
-            {"city": city, "signal_analysis": response.text}
-        ]
-        
-        state["A2_slang_map"] = {
-            "city": city,
-            "applied_slang": slang_reference
-        }
-        
-        reasoning_steps.append(f"Status: Contextual grounding applied for {city}.")
-        reasoning_steps.append(f"Reference: Utilized {len(slang_reference)} local slang signals for mapping.")
-        reasoning_steps.append("Analysis: Localized sentiment patterns isolated from review samples.")
+        raw_response = generate_response(prompt, state)
 
     except Exception as e:
-        reasoning_steps.append(f"Warning: Context Detector Node Error: {str(e)}")
+        state["A2_output"] = _empty_output("LLM failed")
+        state["A2_reasoning"] = str(e)
+        state["current_step"] = 2
+        return state
 
-    # Update Reasoning and Step Logic
-    state["A2_reasoning"] = "\n".join(reasoning_steps)
-    
-    if 2 not in state["completed_steps"]:
-        state["completed_steps"].append(2)
-    
-    # Move to the Semantic Shaper (A3)
+    # -------------------------------
+    # 6. SAFE PARSE (IMPORTANT FIX)
+    # -------------------------------
+    parsed = _safe_parse(raw_response)
+
+    # -------------------------------
+    # 7. STORE OUTPUT
+    # -------------------------------
+    state["A2_output"] = {
+        "localized_sentiment": parsed.get("localized_sentiment", ""),
+        "slang_detected": parsed.get("slang_detected", []),
+        "operational_context": parsed.get("operational_context", ""),
+        "top_themes": parsed.get("top_themes", [])
+    }
+
+    state["A2_reasoning"] = "Success"
+
+    # -------------------------------
+    # 8. STEP UPDATE
+    # -------------------------------
+    steps = state.get("completed_steps", [])
+    if 2 not in steps:
+        steps.append(2)
+
+    state["completed_steps"] = steps
     state["current_step"] = 3
-    
+
     return state
+
+
+# -------------------------------
+# HELPERS
+# -------------------------------
+
+def _empty_output(msg):
+    return {
+        "localized_sentiment": msg,
+        "slang_detected": [],
+        "operational_context": msg,
+        "top_themes": []
+    }
+
+
+import json
+
+def _safe_parse(raw):
+    if isinstance(raw, dict):
+        return raw
+
+    if isinstance(raw, str):
+        # 1. Clean whitespace and Markdown wrappers
+        cleaned = raw.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:-3].strip()  # Remove ```json and trailing ```
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:-3].strip()  # Remove ``` and trailing ```
+        
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            # 2. If it still fails, it might be a partial string or badly formatted
+            return {}
+
+    return {}

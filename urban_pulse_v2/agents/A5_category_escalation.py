@@ -1,80 +1,157 @@
-import os
-import json
-from google import genai
+import pandas as pd
 from core.schema import UrbanPulseState
-from core.constants import BUSINESS_CATEGORIES
+from utils.llm_client import generate_response
+
 
 def category_escalation_node(state: UrbanPulseState) -> UrbanPulseState:
     """
-    Step 5: Categorizes feedback into business domains and flags critical 
-    issues for immediate human intervention.
+    Step 5 — Category & Escalation (A5)
+
+    - Convert clusters into business actions
+    - Assign category, priority, escalation teams
+    - Provide reasoning and impact
     """
+
+    clusters = state.get("A4_output", {}).get("clusters", [])
     df = state.get("filtered_df")
+
     reasoning_steps = []
 
-    if df is None or df.empty:
-        state["A5_reasoning"] = "Error: No data available for categorization."
+    if not clusters or df is None or df.empty:
+        state["A5_output"] = []
+        state["A5_reasoning"] = "No cluster data available"
         return state
 
-    try:
-        # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-        
-        # Batching 20 reviews for efficient triage
-        review_batch = df["raw_text"].head(20).tolist()
-        
-        prompt = f"""
-        Act as a Senior Operations Manager for Q-Commerce.
-        
-        Categories: {BUSINESS_CATEGORIES}
-        
-        Task:
-        1. Categorize the following reviews into the provided categories.
-        2. Identify 'High-Risk' escalations (e.g., product tampering, delivery partner 
-           misbehavior, missing high-value items, or safety concerns).
-        
-        Reviews:
-        {review_batch}
-        
-        Output ONLY a JSON object with:
-        "category_distribution": dict (category name: percentage),
-        "escalations": list (objects with "original_text" and "priority_reason"),
-        "summary": str
-        """
+    actions_output = []
 
-        # Using Gemini 3 Flash for rapid classification
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
-            contents=prompt,
-            config={
-                    "max_output_tokens": 350, 
-                    "temperature": 0.1      
-                } 
-        )
-        
-        # Parse the Triage Data
-        raw_text = response.text.strip().replace("```json", "").replace("```", "")
-        data = json.loads(raw_text)
-        
-        # Update State
-        state["A5_business_categories"] = data.get("category_distribution", {})
-        state["A5_escalation_list"] = data.get("escalations", [])
-        
-        reasoning_steps.append("Status: Operations Triage complete.")
-        reasoning_steps.append(f"Metrics: Analyzed {len(review_batch)} items for categorical distribution.")
-        reasoning_steps.append(f"Alerts: {len(data.get('escalations', []))} high-risk items identified for escalation.")
+    try:
+        for cluster in clusters:
+
+            name = cluster.get("name", "")
+            description = cluster.get("description", "")
+            signals = cluster.get("signals", [])
+            examples = cluster.get("examples", [])
+
+            # -------------------------------
+            # LLM: BUSINESS MAPPING
+            # -------------------------------
+            prompt = f"""
+            You are a Q-Commerce Business Operations Expert.
+
+            Cluster:
+            Name: {name}
+            Description: {description}
+            Signals: {signals}
+
+            Task:
+            Convert this into a business action plan.
+
+            Output STRICT JSON:
+
+            {{
+              "category": "Issue category (e.g., Delivery, Product, Service)",
+              "priority": "High / Medium / Low",
+              "escalation_teams": ["Team1", "Team2"],
+              "reason": "Why this needs attention"
+            }}
+            """
+
+            try:
+                response = generate_response(prompt, state)
+
+                if not isinstance(response, dict):
+                    response = {}
+
+            except:
+                response = {}
+
+            # -------------------------------
+            # FALLBACK LOGIC
+            # -------------------------------
+            category = response.get("category") or _fallback_category(name)
+            priority = response.get("priority") or _fallback_priority(cluster)
+            escalation = response.get("escalation_teams") or _fallback_escalation(category)
+            reason = response.get("reason") or f"Issues related to {name} impacting customer experience"
+
+            # -------------------------------
+            # IMPACT SUMMARY
+            # -------------------------------
+            affected_reviews = cluster.get("size", 0)
+
+            cities = df.get("city", pd.Series()).dropna().unique().tolist()
+            platforms = df.get("platform", pd.Series()).dropna().unique().tolist()
+
+            # -------------------------------
+            # FINAL OBJECT
+            # -------------------------------
+            actions_output.append({
+                "issue_category": category,
+                "priority": priority,
+                "escalation_teams": escalation,
+                "reason": reason,
+                "impact": {
+                    "affected_reviews_percent": affected_reviews,
+                    "cities": cities[:3],
+                    "platforms": platforms[:3]
+                },
+                "supporting_reviews": examples[:5]
+            })
+
+        state["A5_output"] = actions_output
+        reasoning_steps.append(f"{len(actions_output)} business actions generated")
 
     except Exception as e:
-        reasoning_steps.append(f"Warning: Category/Escalation Agent Error: {str(e)}")
+        state["A5_output"] = []
+        reasoning_steps.append(f"Error: {str(e)}")
 
-    # Update State Reasoning
+    # -------------------------------
+    # STATE UPDATE
+    # -------------------------------
     state["A5_reasoning"] = "\n".join(reasoning_steps)
-    
-    # Navigation Logic
-    if 5 not in state["completed_steps"]:
-        state["completed_steps"].append(5)
-    
-    # Move to Platform Signal Agent (A6)
+
+    steps = state.get("completed_steps", [])
+    if 5 not in steps:
+        steps.append(5)
+
+    state["completed_steps"] = steps
     state["current_step"] = 6
-    
+
     return state
+
+
+# =========================================================
+# FALLBACK HELPERS
+# =========================================================
+
+def _fallback_category(name):
+    text = name.lower()
+
+    if "delivery" in text:
+        return "Delivery"
+
+    if "product" in text:
+        return "Product"
+
+    return "Service"
+
+
+def _fallback_priority(cluster):
+    size = cluster.get("size", 0)
+
+    if size >= 35:
+        return "High"
+
+    if size >= 20:
+        return "Medium"
+
+    return "Low"
+
+
+def _fallback_escalation(category):
+    if category == "Delivery":
+        return ["Logistics Team", "Operations"]
+
+    if category == "Product":
+        return ["Inventory Team", "Warehouse"]
+
+    return ["Customer Support"]

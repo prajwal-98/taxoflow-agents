@@ -1,7 +1,7 @@
 import os
-import json
-from google import genai
 from core.schema import UrbanPulseState
+from utils.llm_client import generate_response
+
 
 def novelty_score_node(state: UrbanPulseState) -> UrbanPulseState:
     """
@@ -17,14 +17,10 @@ def novelty_score_node(state: UrbanPulseState) -> UrbanPulseState:
         return state
 
     try:
-        # Initialize the 2026 SDK Client
-        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-        
-        # We feed the summaries from earlier agents to provide "Chain of Thought" context
         context_summary = state.get("A2_context_signals", [{}])[0].get("signal_analysis", "N/A")
         persona_summary = state.get("A4_cluster_stats", {}).get("persona_summary", "N/A")
         market_intel = state.get("A6_market_insights", {}).get("analysis_summary", "N/A")
-        
+
         prompt = f"""
         Act as a Strategic Innovation Lead for a Q-Commerce firm.
         
@@ -49,35 +45,22 @@ def novelty_score_node(state: UrbanPulseState) -> UrbanPulseState:
         "strategic_recommendation": str
         """
 
-        # Using Gemini 3 Flash for the final high-level synthesis
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
-            contents=prompt,
-            config={
-                    "max_output_tokens": 350, 
-                    "temperature": 0.1      
-                }
-        )
-        
-        # Parse the Strategic Data
-        raw_text = response.text.strip().replace("```json", "").replace("```", "")
-        data = json.loads(raw_text)
-        
-        # Update State with final metrics
-        state["A7_novelty_data"] = data
-        
+        response_text = generate_response(prompt, state, temperature=0.1, parse_json=True)
+
+        state["A7_novelty_data"] = response_text
+
         reasoning_steps.append("Status: Final Novelty Assessment finalized.")
-        reasoning_steps.append(f"Novelty Index: {data.get('novelty_score')} ({'High Alert' if data.get('is_anomaly') else 'Stable Patterns'})")
-        reasoning_steps.append(f"Strategic Recommendation: {data.get('strategic_recommendation')[:100]}...")
+        reasoning_steps.append(f"Novelty Index: {response_text.get('novelty_score')} ({'High Alert' if response_text.get('is_anomaly') else 'Stable Patterns'})")
+        
+        recommendation = response_text.get('strategic_recommendation', '')
+        reasoning_steps.append(f"Strategic Recommendation: {recommendation[:100]}...")
 
     except Exception as e:
         reasoning_steps.append(f"Warning: Novelty Score Agent Error: {str(e)}")
 
-    # Update State Reasoning
     state["A7_reasoning"] = "\n".join(reasoning_steps)
-    
-    # Mark the entire graph as completed
+
     if 7 not in state["completed_steps"]:
         state["completed_steps"].append(7)
-    
+
     return state

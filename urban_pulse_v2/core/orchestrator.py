@@ -2,6 +2,7 @@ from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from core.schema import UrbanPulseState
 
+
 # Import Agents (These will be implemented in the /agents folder)
 from agents.A1_gatekeeper import gatekeeper_node
 from agents.A2_context_detector import context_detector_node

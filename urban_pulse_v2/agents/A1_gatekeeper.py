@@ -1,114 +1,200 @@
-import os
-import json
 import pandas as pd
-from google import genai
 from core.schema import UrbanPulseState
 
-# System Instruction to ground the LLM's domain expertise
-SYSTEM_INSTRUCTION = """
-You are a Lead Data Auditor for a Quick-Commerce (Q-Commerce) Intelligence platform. 
-Your task is to determine if customer reviews are relevant to the Q-Commerce ecosystem 
-in India (e.g., Zepto, Blinkit, Swiggy Instamart, BigBasket Now).
-
-Q-Commerce signals: Ultra-fast delivery (10-20 mins), grocery items, delivery partner behavior, 
-platform-specific features like memberships.
-
-If the data is generic e-commerce, food delivery (Zomato/Swiggy Food), or unrelated, 
-it must be flagged as False.
-"""
 
 def gatekeeper_node(state: UrbanPulseState) -> UrbanPulseState:
-    df = state.get("raw_df")
-    checks = {"Schema": False, "Domain": False, "Required Fields": False}
-    reasoning_steps = []
+    """
+    Step 1 — Data Readiness (Gatekeeper)
 
-    # 1. Structural Validation (Early Exit if no data)
+    Responsibilities:
+    - Validate dataset
+    - Generate summary metrics for UI
+    - Provide data quality signals
+    """
+
+    df = state.get("raw_df")
+
+    # -------------------------------
+    # 1. BASIC VALIDATION
+    # -------------------------------
     if df is None or not hasattr(df, "columns") or df.empty:
         state["A1_is_valid"] = False
-        state["A1_reasoning"] = "Critical: Dataframe not found or empty."
-        state["A1_routing_decision"] = "Error"
+        state["A1_reasoning"] = "Dataset is empty or not loaded"
         state["current_step"] = 1
         return state
 
-    # 2. Schema Check
     required_columns = ["raw_text", "star_rating", "city", "platform"]
     missing = [col for col in required_columns if col not in df.columns]
-    
-    if not missing:
-        checks["Schema"] = True
-        checks["Required Fields"] = True
-        reasoning_steps.append("Status: Schema Verified. All required columns present.")
-    else:
-        reasoning_steps.append(f"Error: Schema Failed. Missing columns: {missing}")
 
-    # 3. Domain Triage (Agentic Reasoning)
-    if checks["Schema"]:
-        sample_reviews = df["raw_text"].head(5).tolist()
-        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-        
-        prompt = f"""
-                {SYSTEM_INSTRUCTION}
-
-                Analyze this batch of reviews as a single dataset for Q-Commerce alignment:
-                {sample_reviews}
-
-                Task:
-                Provide a SINGLE JSON object representing the collective validity of this data.
-
-                Output ONLY this JSON structure:
-                {{
-                "is_qcommerce": bool,
-                "confidence": float,
-                "detected_signals": list,
-                "justification": "One sentence summarizing the whole batch"
-                }}
-                """
-       
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.1-flash-lite-preview",
-                contents=prompt,
-                config={
-                    "max_output_tokens": 350, 
-                    "temperature": 0.1      
-                }    
-            )
-            
-            raw_text = response.text.strip().replace("```json", "").replace("```", "")
-            data = json.loads(raw_text)
-            
-            # Robust JSON handling
-            if isinstance(data, list) and len(data) > 0:
-                data = data[0]
-            
-            if not isinstance(data, dict):
-                reasoning_steps.append("Error: LLM returned invalid JSON structure.")
-            elif data.get("is_qcommerce") is True:
-                checks["Domain"] = True
-                reasoning_steps.append(f"Status: Domain Confirmed. Justification: {data.get('justification')}")
-                reasoning_steps.append(f"Detected Signals: {', '.join(data.get('detected_signals', []))}")
-                print("reasoning_stepsreasoning_steps", reasoning_steps)
-            else:
-                reasoning_steps.append("Status: Domain Mismatch.")
-                
-        except Exception as e:
-            reasoning_steps.append(f"Warning: LLM Triage Exception: {str(e)}")
-
-    # 4. State Update & Routing
-    is_valid = all(checks.values())
-    state["A1_is_valid"] = is_valid
-    state["A1_routing_decision"] = "Q-Commerce Intelligence" if is_valid else "Rejected"
-    state["A1_validation_checks"] = checks
-    state["A1_reasoning"] = "\n".join(reasoning_steps)
-    
-    if is_valid:
-        # Safe list update
-        steps = state.get("completed_steps", [])
-        if 1 not in steps:
-            steps.append(1)
-        state["completed_steps"] = steps
-        state["current_step"] = 2
-    else:
+    if missing:
+        state["A1_is_valid"] = False
+        state["A1_reasoning"] = f"Missing columns: {missing}"
         state["current_step"] = 1
+        return state
 
+    # API key check (only for Live mode)
+    if state.get("mode") == "Live API" and not state.get("api_key"):
+        state["A1_is_valid"] = False
+        state["A1_reasoning"] = "Missing API Key"
+        state["current_step"] = 1
+        return state
+
+    # -------------------------------
+    # 2. METRICS (FOR UI CARDS)
+    # -------------------------------
+    total_reviews = len(df)
+    total_cities = df["city"].nunique() if "city" in df.columns else 0
+    total_platforms = df["platform"].nunique() if "platform" in df.columns else 0
+    total_categories = df["category"].nunique() if "category" in df.columns else 0
+
+    state["A1_metrics"] = {
+        "total_reviews": total_reviews,
+        "cities": total_cities,
+        "platforms": total_platforms,
+        "categories": total_categories,
+    }
+
+    # -------------------------------
+    # 3. CHART DATA (FOR UI)
+    # -------------------------------
+    try:
+        platform_dist = (
+            df["platform"].value_counts().reset_index().values.tolist()
+            if "platform" in df.columns else []
+        )
+
+        category_dist = (
+            df["category"].value_counts().reset_index().values.tolist()
+            if "category" in df.columns else []
+        )
+
+        trend = []
+        if "date" in df.columns:
+            temp_df = df.copy()
+            temp_df["date"] = pd.to_datetime(temp_df["date"], errors="coerce")
+            temp_df = temp_df.dropna(subset=["date"])
+            trend = (
+                temp_df.groupby(temp_df["date"].dt.to_period("M"))
+                .size()
+                .reset_index(name="count")
+                .values.tolist()
+            )
+
+        state["A1_charts"] = {
+            "platform_distribution": platform_dist,
+            "category_distribution": category_dist,
+            "review_trend": trend,
+        }
+
+    except Exception:
+        state["A1_charts"] = {}
+
+    # -------------------------------
+    # 4. KEY HIGHLIGHTS
+    # -------------------------------
+    try:
+        top_platform = df["platform"].mode()[0] if "platform" in df.columns else None
+        top_category = df["category"].mode()[0] if "category" in df.columns else None
+
+        peak_month = None
+        if "date" in df.columns:
+            temp_df = df.copy()
+            temp_df["date"] = pd.to_datetime(temp_df["date"], errors="coerce")
+            temp_df = temp_df.dropna(subset=["date"])
+            if not temp_df.empty:
+                peak_month = (
+                    temp_df["date"]
+                    .dt.to_period("M")
+                    .value_counts()
+                    .idxmax()
+                    .strftime("%B")
+                )
+
+        state["A1_highlights"] = {
+            "top_platform": top_platform,
+            "top_category": top_category,
+            "peak_month": peak_month,
+        }
+
+    except Exception:
+        state["A1_highlights"] = {}
+
+    # -------------------------------
+    # 5. DATA QUALITY
+    # -------------------------------
+    missing_ratio = df.isnull().mean().mean()
+
+    state["A1_data_quality"] = {
+        "schema_valid": True,
+        "missing_data_ok": missing_ratio < 0.2,
+        "format_valid": True,
+    }
+
+    # -------------------------------
+    # 6. SAMPLE DATA
+    # -------------------------------
+    state["A1_sample"] = df.head(10)
+
+    # -------------------------------
+    # 7. FINAL STATE
+    # -------------------------------
+    state["A1_is_valid"] = True
+    state["A1_reasoning"] = "Dataset validated successfully"
+
+    df = state.get("filtered_df")
+
+    if df is not None and not df.empty:
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        state["A1_metrics"] = {
+            "total_reviews": len(df),
+            "cities": df["city"].nunique() if "city" in df.columns else 0,
+            "platforms": df["platform"].nunique() if "platform" in df.columns else 0,
+            "categories": df["category"].nunique() if "category" in df.columns else 0,
+        }
+
+        state["A1_charts"] = {
+            "platform_distribution": df["platform"].value_counts().reset_index().values.tolist() if "platform" in df.columns else [],
+            "category_distribution": df["category"].value_counts().reset_index().values.tolist() if "category" in df.columns else [],
+            # "review_trend": df.groupby(df["date"].dt.to_period("M")).size().reset_index().values.tolist() if "date" in df.columns else [],
+            # with this
+            "review_trend": (
+                df.groupby(df["date"].dt.to_period("M"))
+                .size()
+                .reset_index(name="count")
+                .assign(date=lambda x: x["date"].astype(str))  # converts Period → string for plotly
+                [["date", "count"]]
+                .values.tolist()
+            ) if "date" in df.columns else [],
+        }
+
+        state["A1_highlights"] = {
+            "top_platform": df["platform"].mode()[0] if "platform" in df.columns else None,
+            "top_category": df["category"].mode()[0] if "category" in df.columns else None,
+            "peak_month": str(df["date"].dt.to_period("M").mode()[0]) if "date" in df.columns else None,
+        }
+
+        state["A1_data_quality"] = {
+            "schema_valid": True,
+            "missing_data_ok": not df.isnull().any().any(),
+            "format_valid": True,
+        }
+
+        state["A1_sample"] = df.head(10)
+
+    else:
+        state["A1_metrics"] = {}
+        state["A1_charts"] = {}
+        state["A1_highlights"] = {}
+        state["A1_data_quality"] = {}
+        state["A1_sample"] = None
+
+    steps = state.get("completed_steps", [])
+    
+    if 1 not in steps:
+        steps.append(1)
+    state["completed_steps"] = steps
+    state["current_step"] = 2
+    
     return state

@@ -22,10 +22,6 @@ from dotenv import load_dotenv
 # Load variables from .env into the system environment
 load_dotenv()
 
-# Quick debug check (Optional)
-if not os.getenv("GEMINI_API_KEY"):
-    st.error("⚠️ GEMINI_API_KEY not found! Check your .env file.")
-
 def initialize_state():
     """Initializes the UrbanPulseState in Streamlit Session State if not present."""
     if "current_step" not in st.session_state:
@@ -93,16 +89,16 @@ def apply_filters(df, filters):
         
     return filtered
 
-# --- NEW: PIPELINE PROGRESS UI ---
-def render_pipeline_progress():
-    steps = ["Gatekeeper", "Context Detection", "Semantic Mapping", "Clustering", "Risk & Category", "Platform Signals", "Novelty Score"]
-    current = st.session_state.get("current_step", 1)
-    cols = st.columns(len(steps))
-    for i, (col, name) in enumerate(zip(cols, steps), 1):
-        with col:
-            if i < current: col.caption(f"✅ {name}")
-            elif i == current: col.markdown(f"**🔵 {name}**"); st.divider()
-            else: col.caption(f"🔒 {name}")
+# # --- NEW: PIPELINE PROGRESS UI ---
+# def render_pipeline_progress():
+#     steps = ["Gatekeeper", "Context Detection", "Semantic Mapping", "Clustering", "Risk & Category", "Platform Signals", "Novelty Score"]
+#     current = st.session_state.get("current_step", 1)
+#     cols = st.columns(len(steps))
+#     for i, (col, name) in enumerate(zip(cols, steps), 1):
+#         with col:
+#             if i < current: col.caption(f"✅ {name}")
+#             elif i == current: col.markdown(f"**🔵 {name}**"); st.divider()
+#             else: col.caption(f"🔒 {name}")
 
 
 
@@ -113,10 +109,14 @@ import pandas as pd
 from utils.state_utils import load_state_snapshot, save_state_snapshot
 
 def main():
+    # 1. Determine sidebar state based on whether the pipeline is running
+    # If filters are locked, we collapse the sidebar to show the Agent UI full-screen
+    sidebar_state = "collapsed" if st.session_state.get("filters_locked", False) else "expanded"
+
     st.set_page_config(
         page_title="UrbanPulse V2 | Intelligence Dashboard",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state=sidebar_state
     )
 
     st.markdown("""
@@ -196,7 +196,7 @@ def main():
     if not st.session_state.filters_locked:
         render_landing_page()
     else:
-        render_pipeline_progress()
+    #     render_pipeline_progress()
 
         # 9. Execution Logic
         if st.session_state.filters_locked and st.session_state.raw_df is not None:
@@ -228,13 +228,23 @@ def main():
                         "A1_is_valid": False,
                         "A1_routing_decision": "Processing...",
                         "A1_validation_checks": {},
-                        "A1_reasoning": ""
+                        "A1_reasoning": "",
+                        "api_key": st.session_state.get("api_key"),
+                        "model": st.session_state.get("model")
                     }
 
                     try:
+                        preserved_filters = st.session_state.active_filters
                         output_state = urban_pulse_app.invoke(input_state)
+
+                        # DEBUG — print everything except large dataframes
+                        for key, value in output_state.items():
+                            if key not in ['raw_df', 'filtered_df', 'A1_sample']:
+                                print(f"{key}: {value}")
+
                         for key, value in output_state.items():
                             st.session_state[key] = value
+                        st.session_state.active_filters = preserved_filters
 
                         st.session_state.current_step = 1
                         st.session_state.pipeline_run_complete = True
